@@ -93,6 +93,7 @@ def render_circle(jinja_env, forge_config, forge_dir):
             os.path.join(forge_dir, '.circleci', 'checkout_merge_commit.sh'),
             os.path.join(forge_dir, '.circleci', 'fast_finish_ci_pr_build.sh'),
             os.path.join(forge_dir, '.circleci', 'run_docker_build.sh'),
+            os.path.join(forge_dir, '.circleci', 'run_docker_build_ppc64le.sh'),
         ]
         for each_target_fname in target_fnames:
             remove_file(each_target_fname)
@@ -184,6 +185,13 @@ def render_circle(jinja_env, forge_config, forge_dir):
         with write_file(target_fname) as fh:
             fh.write(template.render(**forge_config))
 
+        # TODO: Conda has a convenience for accessing nested yaml content.
+        template_name = 'run_docker_build_ppc64le.tmpl'
+        template = jinja_env.get_template(template_name)
+        target_fname = os.path.join(forge_dir, '.circleci', 'run_docker_build_ppc64le.sh')
+        with write_file(target_fname) as fh:
+            fh.write(template.render(**forge_config))
+
         template_name = 'fast_finish_ci_pr_build.sh.tmpl'
         template = jinja_env.get_template(template_name)
         target_fname = os.path.join(forge_dir, '.circleci', 'fast_finish_ci_pr_build.sh')
@@ -195,6 +203,7 @@ def render_circle(jinja_env, forge_config, forge_dir):
             os.path.join(forge_dir, '.circleci', 'checkout_merge_commit.sh'),
             os.path.join(forge_dir, '.circleci', 'fast_finish_ci_pr_build.sh'),
             os.path.join(forge_dir, '.circleci', 'run_docker_build.sh'),
+            os.path.join(forge_dir, '.circleci', 'run_docker_build_ppc64le.sh'),
         ]
         for each_target_fname in target_fnames:
             set_exe_file(each_target_fname, True)
@@ -660,6 +669,7 @@ def main(forge_file_directory):
     recipe_dir = 'recipe'
     config = {'docker': {'executable': 'docker',
                          'image': 'condaforge/linux-anvil',
+                         'imageppc64': 'kamasubb/conda-forge-linux-anvil-ppc64le',
                          'command': 'bash'},
               'templates': {},
               'travis': {},
@@ -681,6 +691,7 @@ def main(forge_file_directory):
         os.path.join('ci_support', 'checkout_merge_commit.sh'),
         os.path.join('ci_support', 'fast_finish_ci_pr_build.sh'),
         os.path.join('ci_support', 'run_docker_build.sh'),
+        os.path.join('ci_support', 'run_docker_build_ppc64le.sh'),
     ]
     for old_file in old_files:
         remove_file(os.path.join(forge_dir, old_file))
