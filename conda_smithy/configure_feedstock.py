@@ -552,6 +552,7 @@ def copy_feedstock_content(forge_dir):
 def _load_forge_config(forge_dir, exclusive_config_file):
     config = {'docker': {'executable': 'docker',
                          'image': 'condaforge/linux-anvil',
+                         'imageppc64': 'kamasubb/conda-forge-linux-anvil-ppc64le',
                          'command': 'bash'},
               'templates': {},
               'travis': {},
