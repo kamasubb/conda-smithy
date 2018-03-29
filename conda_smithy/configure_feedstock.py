@@ -68,6 +68,7 @@ def meta_config(meta):
 
 
 def render_circle(jinja_env, forge_config, forge_dir):
+    print("Render CircleCI\n")
     meta = forge_config['package']
     with fudge_subdir('linux-64', build_config=meta_config(meta)):
         meta.parse_again()
@@ -184,6 +185,7 @@ def render_circle(jinja_env, forge_config, forge_dir):
         with write_file(target_fname) as fh:
             fh.write(template.render(**forge_config))
 
+
         template_name = 'fast_finish_ci_pr_build.sh.tmpl'
         template = jinja_env.get_template(template_name)
         target_fname = os.path.join(forge_dir, '.circleci', 'fast_finish_ci_pr_build.sh')
@@ -212,13 +214,15 @@ def fudge_subdir(subdir, build_config):
     both when fetching the index and in parsing conda build MetaData.
 
     """
+    print ("subdir="+subdir+"\n")
+    print (build_config)
     # Store conda-build and conda.config's existing settings.
     conda_orig = conda.config.subdir
     cb_orig = build_config.subdir
 
     # Set them to what we want.
     conda.config.subdir = subdir
-    build_config.subdir = subdir
+    #build_config.subdir = subdir
 
     if not hasattr(conda_build, 'api'):
         # Old conda-builds have a copied subdir value, so we need to change that too.
@@ -229,7 +233,7 @@ def fudge_subdir(subdir, build_config):
 
     # Set them back to what they were
     conda.config.subdir = conda_orig
-    build_config.subdir = cb_orig
+    #build_config.subdir = cb_orig
 
     if not hasattr(conda_build, 'api'):
         # Old conda-builds have a copied subdir value, so we need to change that too.
@@ -660,6 +664,7 @@ def main(forge_file_directory):
     recipe_dir = 'recipe'
     config = {'docker': {'executable': 'docker',
                          'image': 'condaforge/linux-anvil',
+                         'imageppc64': 'kamasubb/conda-forge-linux-anvil-ppc64le',
                          'command': 'bash'},
               'templates': {},
               'travis': {},
