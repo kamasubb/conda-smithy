@@ -32,8 +32,12 @@ if [ -z "$CONFIG" ]; then
     exit 1
 fi
 
-pip install shyaml
-DOCKER_IMAGE=$(cat "${FEEDSTOCK_ROOT}/.ci_support/${CONFIG}.yaml" | shyaml get-value docker_image.0 {{ docker.image }} )
+if [ "$(uname -m)" = "x86_64" ]; then
+    pip install shyaml
+    DOCKER_IMAGE=$(cat "${FEEDSTOCK_ROOT}/.ci_support/${CONFIG}.yaml" | shyaml get-value docker_image.0 {{ docker.image }} )
+else
+    DOCKER_IMAGE="{{ docker.image_ppc64le }}"
+fi
 
 mkdir -p "$ARTIFACTS"
 DONE_CANARY="$ARTIFACTS/conda-forge-build-done-${CONFIG}"

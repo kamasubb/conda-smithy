@@ -301,6 +301,7 @@ def _collapse_subpackage_variants(list_of_metas):
     return break_up_top_level_values(top_level_loop_vars, used_key_values), top_level_loop_vars
 
 
+<<<<<<< 56bf994cacf7a07b8af81351816727bea22f9aa4
 def _yaml_represent_ordereddict(yaml_representer, data):
     # represent_dict processes dict-likes with a .sort() method or plain iterables of key-value
     #     pairs. Only for the latter it never sorts and retains the order of the OrderedDict.
@@ -342,6 +343,9 @@ def finalize_config(config, platform):
 
 
 def dump_subspace_config_files(metas, root_path, platform):
+=======
+def dump_subspace_config_files(metas, root_path, platform, arch):
+>>>>>>> Update conda-smithy for linux-ppc64le
     """With conda-build 3, it handles the build matrix.  We take what it spits out, and write a
     config.yaml file for each matrix entry that it spits out.  References to a specific file
     replace all of the old environment variables that specified a matrix entry."""
@@ -356,6 +360,8 @@ def dump_subspace_config_files(metas, root_path, platform):
     yaml.add_representer(tuple, yaml.representer.SafeRepresenter.represent_list)
     yaml.add_representer(OrderedDict, _yaml_represent_ordereddict)
 
+    platform_arch = "{}-{}".format(platform, arch)
+    output_name = platform if arch=="64" else platform_arch
     result = []
     for config in configs:
         config_name = '{}_{}'.format(platform, package_key(config, top_level_loop_vars,
@@ -368,7 +374,11 @@ def dump_subspace_config_files(metas, root_path, platform):
         config = finalize_config(config, platform)
         with write_file(out_path) as f:
             yaml.dump(config, f, default_flow_style=False)
+<<<<<<< 56bf994cacf7a07b8af81351816727bea22f9aa4
         target_platform = config.get("target_platform", [platform])[0]
+=======
+        target_platform = config.get("target_platform", [platform_arch])[0]
+>>>>>>> Update conda-smithy for linux-ppc64le
         result.append((config_name, target_platform))
     return sorted(result)
 
@@ -451,9 +461,10 @@ def _render_ci_provider(provider_name, jinja_env, forge_config, forge_dir, platf
         for config in configs:
             remove_file(config)
 
-        for platform in platforms:
+        for platform, arch in zip(platforms, archs):
+            plat_arch = platform if arch == '64' else "{}-{}".format(platform, arch)
             configs = glob.glob(os.path.join(forge_dir, '.ci_support',
-                                             '{}_*'.format(platform)))
+                                             '{}_*'.format(plat_arch)))
             for config in configs:
                 remove_file(config)
 
@@ -470,17 +481,24 @@ def _render_ci_provider(provider_name, jinja_env, forge_config, forge_dir, platf
             remove_file(each_target_fname)
     else:
         forge_config[provider_name]["enabled"] = True
-        fancy_name = {'linux': 'Linux', 'osx': 'OSX', 'win': 'Windows'}
+        fancy_name = {'linux': 'Linux', 'osx': 'OSX', 'win': 'Windows', 'linux_ppc64le': 'ppc64le'}
         fancy_platforms = []
         unfancy_platforms = set()
 
         configs = []
-        for metas, platform, enable in zip(metas_list_of_lists, platforms, enable_platform):
+        for metas, platform, arch, enable in zip(metas_list_of_lists, platforms, archs, enable_platform):
+            plat_arch = platform if arch == "64" else "{}_{}".format(platform, arch)
             if enable:
+<<<<<<< 56bf994cacf7a07b8af81351816727bea22f9aa4
                 configs.extend(dump_subspace_config_files(metas, forge_dir, platform))
                 forge_config[platform]["enabled"] = True
                 fancy_platforms.append(fancy_name[platform])
                 unfancy_platforms.add(platform)
+=======
+                configs.extend(dump_subspace_config_files(metas, forge_dir, platform, arch))
+                forge_config[plat_arch]["enabled"] = True
+                fancy_platforms.append(fancy_name[plat_arch])
+>>>>>>> Update conda-smithy for linux-ppc64le
             elif platform in extra_platform_files:
                     for each_target_fname in extra_platform_files[platform]:
                         remove_file(each_target_fname)
@@ -628,14 +646,16 @@ def _get_platforms_of_provider(provider, forge_config):
     keep_noarchs = []
     # TODO arch seems meaningless now for most of smithy? REMOVE?
     archs = []
-    for platform in ['linux', 'osx', 'win']:
-        if forge_config['provider'][platform] == provider:
+    for platform, arch in zip(['linux', 'osx', 'win', 'linux'],
+                              ['64',    '64',  '64',  'ppc64le']):
+        plat_arch = platform if arch == "64" else "{}_{}".format(platform, arch)
+        if forge_config['provider'][plat_arch] == provider:
             platforms.append(platform)
-            if platform == 'linux':
+            if plat_arch == 'linux':
                 keep_noarchs.append(True)
             else:
                 keep_noarchs.append(False)
-            archs.append('64')
+            archs.append(arch)
     return platforms, archs, keep_noarchs
 
 
@@ -858,6 +878,7 @@ def copy_feedstock_content(forge_dir):
 def _load_forge_config(forge_dir, exclusive_config_file):
     config = {'docker': {'executable': 'docker',
                          'image': 'condaforge/linux-anvil',
+                         'image_ppc64le': 'condaforge/linux-anvil2',
                          'command': 'bash',
                          'interactive': True,
                          },
@@ -872,10 +893,11 @@ def _load_forge_config(forge_dir, exclusive_config_file):
                   'force': True,
 
               },
-              'provider': {'linux': 'circle', 'osx': 'travis', 'win': 'appveyor'},
+              'provider': {'linux': 'circle', 'osx': 'travis', 'win': 'appveyor', 'linux_ppc64le': ''},
               'win': {'enabled': False},
               'osx': {'enabled': False},
               'linux': {'enabled': False},
+              'linux_ppc64le': {'enabled': False},
               # Compiler stack environment variable
               'compiler_stack': 'comp4',
               # Stack variables,  These can be used to impose global defaults for how far we build out
@@ -883,7 +905,6 @@ def _load_forge_config(forge_dir, exclusive_config_file):
               'max_py_ver': '36',
               'min_r_ver': '34',
               'max_r_ver': '34',
-
               'channels': {'sources': ['conda-forge', 'defaults'],
                            'targets': [['conda-forge', 'main']]},
               'github': {'user_or_org': 'conda-forge',
