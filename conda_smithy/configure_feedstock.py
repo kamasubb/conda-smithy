@@ -343,9 +343,6 @@ def finalize_config(config, platform):
 
 
 def dump_subspace_config_files(metas, root_path, platform):
-=======
-def dump_subspace_config_files(metas, root_path, platform, arch):
->>>>>>> Update conda-smithy for linux-ppc64le
     """With conda-build 3, it handles the build matrix.  We take what it spits out, and write a
     config.yaml file for each matrix entry that it spits out.  References to a specific file
     replace all of the old environment variables that specified a matrix entry."""
@@ -877,11 +874,17 @@ def copy_feedstock_content(forge_dir):
 
 def _load_forge_config(forge_dir, exclusive_config_file):
     config = {'docker': {'executable': 'docker',
+<<<<<<< 4323f11cd8e145a017176608d808b81a864b4f36
                          'image': 'condaforge/linux-anvil',
                          'image_ppc64le': 'condaforge/linux-anvil2',
                          'command': 'bash',
                          'interactive': True,
                          },
+=======
+                         'image': 'condaforge/linux-anvil2',
+                         'image_ppc64le': 'condaforge/linux-ppc64le-anvil',
+                         'command': 'bash'},
+>>>>>>> Update docker image name
               'templates': {},
               'travis': {},
               'circle': {},
