@@ -7,6 +7,7 @@ import collections
 import requests
 import tempfile
 import tarfile
+import zipfile
 from .utils import tmp_directory, render_meta_yaml
 
 class Str(ruamel.yaml.scalarstring.ScalarString):
@@ -70,6 +71,22 @@ class Section:
         return Section(sect, start, self.end)
 
 
+def iterate(tarzip):
+    if isinstance(tarzip, zipfile.ZipFile):
+        for f in iter(tarzip.infolist()):
+            yield f
+    elif isinstance(tarzip, tarfile.TarFile):
+        for f in tarzip:
+            yield f
+
+
+def name(tzinfo):
+    if isinstance(tzinfo, zipfile.ZipInfo):
+        return tzinfo.filename
+    elif isinstance(tzinfo, tarfile.TarInfo):
+        return tzinfo.name
+
+
 def get_compilers(url):
     '''
     Download the source and check for C/C++/Fortran
@@ -85,21 +102,26 @@ def get_compilers(url):
                 break
     else:
         r = requests.get(url, allow_redirects=True)
-    fname = url.split('/')[-1]
+    fname = os.path.basename(url)
+    ext = os.path.splitext(url)[1]
+    if ext == '.zip':
+        tarzip_open = zipfile.ZipFile
+    else:
+        tarzip_open = tarfile.open
 
     with tmp_directory() as tmp_dir:
         with open(os.path.join(tmp_dir, fname), 'wb') as f:
             f.write(r.content)
         need_numpy_pin = False
-        with tarfile.open(os.path.join(tmp_dir, fname)) as tf:
-            need_f = any([f.name.lower().endswith(('.f', '.f90', '.f77')) for f in tf])
+        with tarzip_open(os.path.join(tmp_dir, fname)) as tf:
+            need_f = any([name(f).lower().endswith(('.f', '.f90', '.f77')) for f in iterate(tf)])
             # Fortran builds use CC to perform the link (they do not call the linker directly).
             need_c = True if need_f else \
-                        any([f.name.lower().endswith(('.c', '.pyx')) for f in tf])
-            need_cxx = any([f.name.lower().endswith(('.cxx', '.cpp', '.cc', '.c++'))
-                        for f in tf])
-            for f in tf:
-                if f.name.lower().endswith('setup.py'):
+                        any([name(f).lower().endswith(('.c', '.pyx')) for f in iterate(tf)])
+            need_cxx = any([name(f).lower().endswith(('.cxx', '.cpp', '.cc', '.c++'))
+                        for f in iterate(tf)])
+            for f in iterate(tf):
+                if name(f).lower().endswith('setup.py'):
                     try:
                         content = tf.extractfile(f).read().decode("utf-8")
                         if 'numpy.get_include()' in content or 'np.get_include()' in content:
@@ -107,7 +129,6 @@ def get_compilers(url):
                     except:
                         pass
     return need_f, need_c, need_cxx, need_numpy_pin
-
 
 
 def update_cb3(recipe_path, conda_build_config_path):
@@ -163,6 +184,7 @@ def update_cb3(recipe_path, conda_build_config_path):
     need_f, need_c, need_cxx, need_numpy_pin = get_compilers(url)
     #need_f, need_c, need_cxx, need_numpy_pin = False, False, False, False
     need_mingw_c = False
+    is_r_package = False
 
     with io.open(conda_build_config_path, 'r') as fh:
         config = ''.join(fh)
@@ -205,13 +227,16 @@ def update_cb3(recipe_path, conda_build_config_path):
                 req_rendered = req
             if req == 'libgfortran':
                 need_f = True
-            if req_rendered in ['toolchain', 'gcc', 'libgcc', 'libgfortran', 'vc', 'm2w64-toolchain',
-                       'mingwpy', 'system', 'gcc-libs', 'm2w64-gcc-libs']:
+            if req == 'r-base':
+                is_r_package = True
+            if req_rendered in ['toolchain', 'toolchain3', 'gcc', 'libgcc',
+                       'libgfortran', 'vc', 'm2w64-toolchain', 'mingwpy', 'system',
+                       'gcc-libs', 'm2w64-gcc-libs']:
                 messages['Removing {} in favour of compiler()'.format(req)] = True
                 change_lines[i] = (lines[i], None)
                 need_c = True
                 if req in ['m2w64-toolchain', 'mingwpy'] or \
-                        (req != req_rendered and req_rendered == 'toolchain'):
+                        (req != req_rendered and req_rendered in ['toolchain', 'toolchain3']):
                     need_mingw_c = True
                 continue
             if req_rendered == 'cython' and not (need_c or need_cxx or need_f):
@@ -342,6 +367,11 @@ def update_cb3(recipe_path, conda_build_config_path):
         build_lines = [' '*(len(reqbuild_line) - len(reqbuild_line.lstrip()))  +'build:'] + build_lines
         pos = requirements_section.start - 1
         change_lines[pos] = lines[pos], lines[pos] + '\n'.join(build_lines)
+
+    if is_r_package:
+        messages['Adding merge_build_host: True  # [win]'] = True
+        pos = build_section.start - 1
+        change_lines[pos] = lines[pos], lines[pos] + ' '*(len(lines[pos + 1]) - len(lines[pos + 1].lstrip()))  + 'merge_build_host: True  # [win]'
 
     new_lines = []
 

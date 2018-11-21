@@ -2,34 +2,35 @@
 
 from __future__ import unicode_literals
 
-import datetime
+try:
+    from collections.abc import Sequence, Mapping
+    str_type = str
+except ImportError:  # python 2
+    from collections import Sequence, Mapping
+    str_type = basestring
+import copy
 import io
 import itertools
 import os
 import re
-import time
 
 import github
-import jinja2
 import ruamel.yaml
 
 from conda_build.metadata import (ensure_valid_license_family,
                                   FIELDS as cbfields)
 import conda_build.conda_interface
 
-from collections import defaultdict
-
-import copy
-
 from .utils import render_meta_yaml
+
 
 FIELDS = copy.deepcopy(cbfields)
 
 # Just in case 'extra' moves into conda_build
 if 'extra' not in FIELDS.keys():
-    FIELDS['extra'] = []
+    FIELDS['extra'] = set()
 
-FIELDS['extra'].append('recipe-maintainers')
+FIELDS['extra'].add('recipe-maintainers')
 
 EXPECTED_SECTION_ORDER = ['package', 'source', 'build', 'requirements',
                           'test', 'app', 'outputs', 'about', 'extra']
@@ -37,6 +38,7 @@ EXPECTED_SECTION_ORDER = ['package', 'source', 'build', 'requirements',
 REQUIREMENTS_ORDER = ['build', 'host', 'run']
 
 TEST_KEYS = {'imports', 'commands'}
+TEST_FILES = ['run_test.py', 'run_test.sh', 'run_test.bat', 'run_test.pl']
 
 sel_pat = re.compile(r'(.+?)\s*(#.*)?\[([^\[\]]+)\](?(2).*)$')
 jinja_pat = re.compile(r'\s*\{%\s*(set)\s+[^\s]+\s*=\s*[^\s]+\s*%\}')
@@ -44,27 +46,30 @@ jinja_pat = re.compile(r'\s*\{%\s*(set)\s+[^\s]+\s*=\s*[^\s]+\s*%\}')
 
 def get_section(parent, name, lints):
     if name == 'source':
-        return get_source_section(parent, lints)
+        return get_list_section(parent, name, lints, allow_single=True)
+    elif name == 'outputs':
+        return get_list_section(parent, name, lints)
 
     section = parent.get(name, {})
-    if not isinstance(section, dict):
+    if not isinstance(section, Mapping):
         lints.append('The "{}" section was expected to be a dictionary, but '
                      'got a {}.'.format(name, type(section).__name__))
         section = {}
     return section
 
 
-def get_source_section(parent, lints):
-    section = parent.get('source', {})
-    if isinstance(section, dict):
-        return [ section ]
-    elif isinstance(section, list):
+def get_list_section(parent, name, lints, allow_single=False):
+    section = parent.get(name, [])
+    if allow_single and isinstance(section, Mapping):
+        return [section]
+    elif isinstance(section, Sequence) and not isinstance(section, str_type):
         return section
     else:
-        lints.append('The "source" section was expected to be a dictionary or '
-                     'a list, but got a {}.{}'.format(type(section).__module__,
-                         type(section).__name__))
-        return [ {} ]
+        msg = ('The "{}" section was expected to be a {}list, but got a {}.{}.'
+               .format(name, "dictionary or a " if allow_single else "",
+                       type(section).__module__, type(section).__name__))
+        lints.append(msg)
+        return [{}]
 
 
 def lint_section_order(major_sections, lints):
@@ -103,6 +108,7 @@ def lintify(meta, recipe_dir=None, conda_forge=False):
     about_section = get_section(meta, 'about', lints)
     extra_section = get_section(meta, 'extra', lints)
     package_section = get_section(meta, 'package', lints)
+    outputs_section = get_section(meta, 'outputs', lints)
 
     # 0: Top level keys should be expected
     unexpected_sections = []
@@ -126,19 +132,34 @@ def lintify(meta, recipe_dir=None, conda_forge=False):
                      'the `extra/recipe-maintainers` section.')
 
     # 3b: Maintainers should be a list
-    if not isinstance(extra_section.get('recipe-maintainers', []), list):
+    if not (isinstance(extra_section.get('recipe-maintainers', []), Sequence)
+            and not isinstance(extra_section.get('recipe-maintainers', []),
+                               str_type)):
         lints.append('Recipe maintainers should be a json list.')
 
     # 4: The recipe should have some tests.
     if not any(key in TEST_KEYS for key in test_section):
-        test_files = ['run_test.py', 'run_test.sh', 'run_test.bat',
-                      'run_test.pl']
         a_test_file_exists = (recipe_dir is not None and
                               any(os.path.exists(os.path.join(recipe_dir,
                                                               test_file))
-                                  for test_file in test_files))
+                                  for test_file in TEST_FILES))
         if not a_test_file_exists:
-            lints.append('The recipe must have some tests.')
+            has_outputs_test = False
+            no_test_hints = []
+            if outputs_section:
+                for out in outputs_section:
+                    test_out = get_section(out, 'test', lints)
+                    if any(key in TEST_KEYS for key in test_out):
+                        has_outputs_test = True
+                    else:
+                        no_test_hints.append(
+                            "It looks like the '{}' output doesn't "
+                            "have any tests.".format(out.get('name', '???')))
+
+            if has_outputs_test:
+                hints.extend(no_test_hints)
+            else:
+                lints.append('The recipe must have some tests.')
 
     # 5: License cannot be 'unknown.'
     license = about_section.get('license', '').lower()
@@ -232,11 +253,13 @@ def lintify(meta, recipe_dir=None, conda_forge=False):
         if not expected_subsections:
             continue
         for subsection in get_section(meta, section, lints):
-            if section != 'source' and subsection not in expected_subsections:
+            if (section != 'source'
+                and section != 'outputs'
+                and subsection not in expected_subsections):
                 lints.append('The {} section contained an unexpected '
                              'subsection name. {} is not a valid subsection'
                              ' name.'.format(section, subsection))
-            elif section == 'source':
+            elif section == 'source' or section == 'outputs':
                 for source_subsection in subsection:
                     if source_subsection not in expected_subsections:
                         lints.append('The {} section contained an unexpected '
@@ -294,15 +317,15 @@ def lintify(meta, recipe_dir=None, conda_forge=False):
                          '<variable name><one space>=<one space>'
                          '<expression><one space>%}}`` form. See lines '
                          '{}'.format(bad_lines))
-
-    # hints
-    # 1: Legacy usage of compilers
+    
+    # 21: Legacy usage of compilers
     if build_reqs and ('toolchain' in build_reqs):
-        hints.append('Using toolchain directly in this manner is deprecated.  Consider '
+        lints.append('Using toolchain directly in this manner is deprecated.  Consider '
                      'using the compilers outlined '
                      '[here](https://conda-forge.org/docs/meta.html#compilers).')
 
-    # 2: suggest pip
+    # hints
+    # 1: suggest pip
     if 'script' in build_section:
         scripts = build_section['script']
         if isinstance(scripts, str):
@@ -323,8 +346,8 @@ def run_conda_forge_specific(meta, recipe_dir, lints, hints):
     recipe_name = package_section.get('name', '').strip()
     is_staged_recipes = recipe_dirname != 'recipe'
 
-    # 1: Check that the recipe does not exist in conda-forge
-    if is_staged_recipes:
+    # 1: Check that the recipe does not exist in conda-forge or bioconda
+    if is_staged_recipes and recipe_name:
         cf = gh.get_user(os.getenv('GH_ORG', 'conda-forge'))
         try:
             cf.get_repo('{}-feedstock'.format(recipe_name))

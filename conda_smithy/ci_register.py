@@ -16,7 +16,6 @@ from . import github
 # https://circleci.com/api/v1/project/:username/:project/envvar?circle-token=:token
 
 try:
-    # Create a token at https://circleci.com/account/api. Put it in circle.token
     with open(os.path.expanduser('~/.conda-smithy/circle.token'), 'r') as fh:
         circle_token = fh.read().strip()
     if not circle_token:
@@ -124,6 +123,15 @@ def add_project_to_circle(user, project):
     print(' * {}/{} enabled on CircleCI'.format(user, project))
 
 
+def add_project_to_azure(user, project):
+    from . import azure_ci_utils
+    if azure_ci_utils.repo_registered(user, project):
+        print(' * {}/{} already enabled on azure pipelines'.format(user, project))
+    else:
+        azure_ci_utils.register_repo(user, project)
+        print(' * {}/{} has been enabled on azure pipelines'.format(user, project))
+
+
 def add_project_to_appveyor(user, project):
     headers = {'Authorization': 'Bearer {}'.format(appveyor_token),
                }
@@ -217,7 +225,7 @@ def travis_wait_until_synced(ignore=False):
 def travis_repo_writable(repo_info):
     if "@permissions" not in repo_info:
         return False
-    permissions = repo_info["@permissiqons"]
+    permissions = repo_info["@permissions"]
     if "admin" not in permissions or not permissions["admin"]:
         return False
     return True
@@ -317,7 +325,7 @@ def travis_encrypt_binstar_token(repo, string_to_encrypt):
     #    not use this file except in compliance with the License. You may obtain
     #    a copy of the License at
     #
-    #         http://www.apache.org/licenses/LICENSE-2.0
+    #         https://www.apache.org/licenses/LICENSE-2.0
     #
     #    Unless required by applicable law or agreed to in writing, software
     #    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -398,25 +406,25 @@ def add_conda_forge_webservice_hooks(user, repo):
 
     hooks = [
         get_conda_hook_info(
-            "http://conda-forge.herokuapp.com/conda-linting/hook",
+            "https://conda-forge.herokuapp.com/conda-linting/hook",
             [
                 "pull_request"
             ]
         ),
         get_conda_hook_info(
-            "http://conda-forge.herokuapp.com/conda-forge-feedstocks/hook",
+            "https://conda-forge.herokuapp.com/conda-forge-feedstocks/hook",
             [
                 "push", "repository"
             ]
         ),
         get_conda_hook_info(
-            "http://conda-forge.herokuapp.com/conda-forge-teams/hook",
+            "https://conda-forge.herokuapp.com/conda-forge-teams/hook",
             [
                 "push", "repository"
             ]
         ),
         get_conda_hook_info(
-            "http://conda-forge.herokuapp.com/conda-forge-command/hook",
+            "https://conda-forge.herokuapp.com/conda-forge-command/hook",
             [
                 "pull_request_review", "pull_request",
                 "pull_request_review_comment", "issue_comment", "issues",

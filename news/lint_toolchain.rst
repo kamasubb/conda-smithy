@@ -1,13 +1,13 @@
 **Added:** None
 
-**Changed:** None
+**Changed:** 
+
+* updated toolchain lint to error
 
 **Deprecated:** None
 
 **Removed:** None
 
-**Fixed:**
-
-- Fix travis-ci API permission error (#812)
+**Fixed:** None
 
 **Security:** None

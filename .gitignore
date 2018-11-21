@@ -10,3 +10,11 @@ dist/
 
 # Rever
 rever/
+
+# Pycharm
+.idea/
+# Notepad++ files
+nppBackup/
+
+# Pytest dirs/files
+.pytest_cache/

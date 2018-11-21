@@ -154,6 +154,7 @@ class RegisterCI(Subcommand):
         ci_register.travis_configure(owner, repo)
         ci_register.travis_cleanup(owner, repo)
         ci_register.add_project_to_circle(owner, repo)
+        ci_register.add_project_to_azure(owner, repo)
         ci_register.add_token_to_circle(owner, repo)
         ci_register.add_project_to_appveyor(owner, repo)
         ci_register.appveyor_encrypt_binstar_token(args.feedstock_directory, owner, repo)
@@ -174,7 +175,7 @@ class Regenerate(Subcommand):
                          help="The directory of the feedstock git repository.")
         scp.add_argument("-c", "--commit", nargs='?', choices=["edit", "auto"], const="edit",
                          help="Whether to setup a commit or not.")
-        scp.add_argument("--no-check-uptodate", default=False,
+        scp.add_argument("--no-check-uptodate", action="store_true",
                          help="Don't check that conda-smithy and conda-forge-pinning are uptodate")
         scp.add_argument("-e", "--exclusive-config-file", default=None,
                          help="Exclusive conda-build config file to replace conda-forge-pinning. " + \
@@ -249,7 +250,7 @@ def main():
     parser = argparse.ArgumentParser("a tool to help create, administer and manage feedstocks.")
     subparser = parser.add_subparsers()
     # TODO: Consider allowing plugins/extensions using entry_points.
-    # http://reinout.vanrees.org/weblog/2010/01/06/zest-releaser-entry-points.html
+    # https://reinout.vanrees.org/weblog/2010/01/06/zest-releaser-entry-points.html
     for subcommand in Subcommand.__subclasses__():
         subcommand(subparser)
     # And the alias for rerender
